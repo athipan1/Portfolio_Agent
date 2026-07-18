@@ -13,6 +13,12 @@ AUTH_HEADERS = {
 }
 
 
+def test_root_status_endpoint_remains_public():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "Portfolio Agent is running"}
+
+
 def test_health_endpoint_is_public():
     response = client.get("/health")
     assert response.status_code == 200
