@@ -89,7 +89,10 @@ class StandardAgentResponse(BaseModel, Generic[T]):
     status: str
     agent_type: str = "portfolio-agent"
     version: str = "0.1.0"
+    schema_version: str = "1.0"
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    correlation_id: Optional[str] = None
     data: Optional[T] = None
     error: Optional[Dict[str, Any]] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    confidence_score: Optional[float] = None
