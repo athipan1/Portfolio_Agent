@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from math import isclose
 from typing import Dict, List
 
+from app.config import (
+    PORTFOLIO_EQUITY_ABS_TOLERANCE,
+    PORTFOLIO_EQUITY_REL_TOLERANCE,
+)
 from app.models import (
     BucketExposure,
     PortfolioData,
@@ -25,6 +30,10 @@ RECOMMENDED_CASH_BY_MODE = {
     PortfolioMode.DEFENSIVE: 0.15,
     PortfolioMode.CASH_HEAVY: 0.30,
 }
+
+
+class PortfolioSnapshotValidationError(ValueError):
+    """Raised when cash and position values do not reconcile to equity."""
 
 
 def _normalize_bucket(position: PositionInput) -> str:
@@ -58,7 +67,33 @@ def _position_action(position_weight: float, max_symbol_weight: float, bucket: s
     return RebalanceAction.HOLD, "Position is within portfolio limits"
 
 
+def _validate_equity_consistency(request: PortfolioRequest) -> tuple[float, float, float]:
+    positions_market_value = sum(position.market_value for position in request.positions)
+    snapshot_value = request.cash + positions_market_value
+    difference = snapshot_value - request.equity
+    tolerance = max(
+        PORTFOLIO_EQUITY_ABS_TOLERANCE,
+        abs(request.equity) * PORTFOLIO_EQUITY_REL_TOLERANCE,
+    )
+
+    if not isclose(
+        snapshot_value,
+        request.equity,
+        rel_tol=PORTFOLIO_EQUITY_REL_TOLERANCE,
+        abs_tol=PORTFOLIO_EQUITY_ABS_TOLERANCE,
+    ):
+        raise PortfolioSnapshotValidationError(
+            "Portfolio snapshot does not reconcile: "
+            f"cash ({request.cash:.2f}) + positions.market_value ({positions_market_value:.2f}) "
+            f"= {snapshot_value:.2f}, equity = {request.equity:.2f}, "
+            f"difference = {difference:.2f}, allowed tolerance = {tolerance:.2f}"
+        )
+
+    return snapshot_value, difference, tolerance
+
+
 def analyze_portfolio(request: PortfolioRequest) -> PortfolioData:
+    snapshot_value, equity_difference, equity_tolerance = _validate_equity_consistency(request)
     targets = _normalize_targets(request.target_bucket_weights)
     bucket_values: Dict[str, float] = defaultdict(float)
     warnings: List[str] = []
@@ -133,5 +168,8 @@ def analyze_portfolio(request: PortfolioRequest) -> PortfolioData:
             "max_symbol_weight": request.max_symbol_weight,
             "rebalance_tolerance": request.rebalance_tolerance,
             "target_bucket_weights": targets,
+            "snapshot_value": round(snapshot_value, 2),
+            "equity_difference": round(equity_difference, 6),
+            "equity_reconciliation_tolerance": round(equity_tolerance, 6),
         },
     )
