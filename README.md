@@ -12,27 +12,36 @@ It does **not** place orders. It returns advisory portfolio metadata for `Manage
 - Detect oversized positions
 - Recommend rebalance actions
 - Adjust cash expectations based on operating mode: `normal`, `defensive`, or `cash_heavy`
+- Reject portfolio snapshots where `cash + sum(positions.market_value)` does not reconcile to `equity`
 
 ## API
 
 ### Health
 
+Operational endpoints are public and echo `X-Correlation-ID` when supplied.
+
 ```bash
-curl http://localhost:8012/health
+curl http://localhost:8012/health \
+  -H 'X-Correlation-ID: health-check-001'
 ```
 
 ### Portfolio Exposure
 
+Portfolio advisory endpoints require `X-API-KEY`.
+
 ```bash
 curl -X POST http://localhost:8012/portfolio/exposure \
   -H 'Content-Type: application/json' \
+  -H 'X-API-KEY: dev_portfolio_key' \
+  -H 'X-Correlation-ID: portfolio-request-001' \
   -d '{
     "equity": 100000,
     "cash": 20000,
     "mode": "normal",
     "positions": [
       {"symbol": "ACGL", "market_value": 10000, "strategy_bucket": "value_rebound"},
-      {"symbol": "ADBE", "market_value": 8000, "strategy_bucket": "core_dividend"}
+      {"symbol": "ADBE", "market_value": 8000, "strategy_bucket": "core_dividend"},
+      {"symbol": "SPY", "market_value": 62000, "strategy_bucket": "core_dividend"}
     ]
   }'
 ```
@@ -41,9 +50,10 @@ Example response fields:
 
 ```json
 {
+  "correlation_id": "portfolio-request-001",
   "rebalance_required": true,
   "cash_weight": 0.20,
-  "invested_weight": 0.18,
+  "invested_weight": 0.80,
   "recommended_cash_weight": 0.05,
   "bucket_exposure": [],
   "position_exposure": [],
@@ -51,10 +61,21 @@ Example response fields:
 }
 ```
 
+## Snapshot integrity
+
+`cash + sum(positions.market_value)` must match `equity`. Requests outside the configured absolute and relative tolerances return HTTP 422 before exposure weights are calculated.
+
+```text
+PORTFOLIO_EQUITY_ABS_TOLERANCE=0.01
+PORTFOLIO_EQUITY_REL_TOLERANCE=0.000001
+```
+
 ## Endpoints
 
 ```text
 GET  /health
+GET  /ready
+GET  /version
 POST /portfolio/exposure
 POST /portfolio/allocation
 POST /portfolio/rebalance
@@ -66,6 +87,7 @@ POST /portfolio/rebalance
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+export PORTFOLIO_AGENT_API_KEY=dev_portfolio_key
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8012
 ```
 
@@ -80,7 +102,9 @@ pytest -q
 
 ```bash
 docker build -t portfolio-agent .
-docker run --rm -p 8012:8012 portfolio-agent
+docker run --rm -p 8012:8012 \
+  -e PORTFOLIO_AGENT_API_KEY=replace_me \
+  portfolio-agent
 ```
 
 ## Integration rule
