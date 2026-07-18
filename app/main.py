@@ -25,6 +25,7 @@ app = FastAPI(
 app.include_router(system_contract_router)
 
 PUBLIC_PATHS = {
+    "/",
     "/health",
     "/ready",
     "/version",
