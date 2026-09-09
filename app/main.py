@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 
 from app.config import PORTFOLIO_AGENT_API_KEY
 from app.models import (
@@ -69,6 +70,17 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         message=str(exc.detail),
         correlation_id=request.headers.get("X-Correlation-ID"),
     )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_handler(request: Request, exc: RequestValidationError):
+    # Keep the common error envelope without echoing raw/nonfinite input values.
+    message = "; ".join(
+        f"{'.'.join(str(part) for part in error['loc'])}: {error['msg']}"
+        for error in exc.errors()
+    )
+    return _error_response(status_code=422, message=message,
+                           correlation_id=request.headers.get("X-Correlation-ID"))
 
 
 def _analyze(request: PortfolioRequest) -> PortfolioData:

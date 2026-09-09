@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 T = TypeVar("T")
@@ -24,6 +24,7 @@ class RebalanceAction(str, Enum):
 
 
 class PositionInput(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     symbol: str
     market_value: float = Field(ge=0)
     quantity: Optional[float] = Field(default=None, ge=0)
@@ -33,6 +34,7 @@ class PositionInput(BaseModel):
 
 
 class PortfolioRequest(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     equity: float = Field(gt=0)
     cash: float = Field(ge=0)
     positions: List[PositionInput] = Field(default_factory=list)
